@@ -1,75 +1,9 @@
-// VNode 的种类
-// 1、HTML、SVG标签
-// 2、组件
-//      - 有状态的组件
-//          - 普通的有状态组件
-//          - 需要被keepAlive的有状态组件
-//          - 已经被keepAlive的有状态组件
-//      - 函数式组件
-// 3、纯文本
-// 4、Fragment
-// 5、Portal
-
-// 设计VNode对象时，通过flags字段区分种类
-
-// 枚举VNodeFlags
-const VNodeFlags = {
-    // HTML 标签
-    ELEMENT_HTML: 1,
-    // SVG 标签
-    ELEMENT_SVG: 1 << 1,
-
-    // 普通有状态的组件
-    COMPONENT_STATEFUL_NORMAL: 1 << 2,
-    // 需要被keepAlive的有状态组件
-    COMPONENT_STATEFUL_SHOULD_KEEP_ALIVE: 1 << 3,
-    // 已经被keepAlive的有状态组件
-    COMPONENT_STATEFUL_KEPT_ALIVE: 1 << 4,
-    // 函数式组件
-    COMPONENT_FUNCTIONAL: 1 << 5,
-
-    // 纯文本
-    TEXT: 1 << 6,
-    // Fragment
-    FRAGMENT: 1 << 7,
-    // Portal
-    PORTAL: 1 << 8
-}
-// 派生出三个额外的标识用于辅助判断
-// html和svg都是标签元素，可以用ELEMENT表示
-VNodeFlags.ELEMENT = VNodeFlags.ELEMENT_HTML | VNodeFlags.ELEMENT_SVG
-// 普通有状态组件、需要被keepAlive的有状态组件、已经被keepAlive的有状态组件 都是“有状态组件”，可以用COMPONENT_STATEFUL表示
-VNodeFlags.COMPONENT_STATEFUL = VNodeFlags.COMPONENT_STATEFUL_NORMAL
-    | VNodeFlags.COMPONENT_STATEFUL_KEPT_ALIVE
-    | VNodeFlags.COMPONENT_STATEFUL_SHOULD_KEEP_ALIVE
-// 有状态组件 和 函数式组件都是 “组件”，用COMPONENT表示
-VNodeFlags.COMPONENT = VNodeFlags.COMPONENT_STATEFUL | VNodeFlags.COMPONENT_FUNCTIONAL
-
-// 一个标签的子节点
-// - 没有子节点
-// - 只有一个子节点
-// - 多个子节点
-//      - 有key
-//      - 无key
-// - 不知道子节点的情况
-
-// 枚举子节点ChildrenFlags
-const ChildrenFlags = {
-    // 未知的 children 类型
-    UNKNOWN_CHILDREN: 0,
-    // 没有 children
-    NO_CHILDREN: 1,
-    // children 是单个VNode
-    SINGLE_VNODE: 1 << 1,
-
-    // children 是多个拥有key的VNode
-    KEYED_VNODES: 1 << 2,
-    // children 是多个没有key的VNode
-    NODE_KEYED_VNODES: 1 << 3
-}
-// 派生出一个“多节点”标识
-// 判断一个VNode的子节点是否是多个子节点 ： someVNode.childFlags & ChildrenFlags.MULTIPLE_VNODES
-ChildrenFlags.MULTIPLE_VNODES = ChildrenFlags.KEYED_VNODES | ChildrenFlags.NODE_KEYED_VNODES
+// 应用层设计
+// 这是框架设计的核心
+// 首先考虑应用层的使用，然后再考虑如何与底层衔接
+import VNodeFlags from './vnodeflags.js'
+import ChildrenFlags from './childrenflags.js'
+import { mount, createTextVNode } from './mount.js'
 
 // 唯一标识 Fragment 无外层div
 const Fragment = Symbol()
@@ -81,11 +15,16 @@ const Portal = Symbol()
  * @param tag
  * @param data
  * @param children
+ * @return {any}
  */
-function h(tag, data = null, children = null) {
+export function h(tag, data = null, children = null) {
     let flags = null
     if (typeof tag === 'string') {
         flags = tag === 'svg' ? VNodeFlags.ELEMENT_SVG : VNodeFlags.ELEMENT_HTML
+        // 序列化 class
+        if (data) {
+            data.class = normalizeClass(data.class)
+        }
     } else if (tag === Fragment) {
         flags = VNodeFlags.FRAGMENT
     } else if (tag === Portal) {
@@ -138,8 +77,15 @@ function h(tag, data = null, children = null) {
         childFlags = ChildrenFlags.SINGLE_VNODE
         children = createTextVNode(children + '')
     }
+    // 返回 VNode对象
     return {
-        flags
+        _isVNode: true,
+        flags,
+        data,
+        tag,
+        children,
+        childFlags,
+        el: null
     }
 }
 
@@ -160,37 +106,64 @@ function normalizeVNodes(children) {
 }
 
 /**
- * 创建纯文本类型的VNode
- * @param text
- * @return {any}
+ * 序列化 class
+ * @param classValue
+ * @return {string}
  */
-function createTextVNode(text) {
-    return {
-        _isVNode: true,
-        flags: VNodeFlags.TEXT,
-        tag: null,
-        data: null,
-        // 纯文本类型的VNode，其children属性存储的是与之相符的文本内容
-        children: text,
-        // 文本节点没有子节点
-        childFlags: ChildrenFlags.NO_CHILDREN,
-        el: null
+function normalizeClass(classValue) {
+    // res 是最终要返回的类名字符串
+    let res = ''
+    if (typeof  classValue === 'string') {
+        res = classValue
+    } else if (Array.isArray(classValue)) {
+        for (let i = 0; i < classValue.length; i++) {
+            res += normalizeClass(classValue[i]) + ''
+        }
+    } else if (typeof classValue === 'object') {
+        for (const name in  classValue) {
+            if (classValue[name]) {
+                res += name + ' '
+            }
+        }
     }
+    return res.trim()
 }
+
 
 /**
  * 渲染函数
  * @param vnode
  * @param container 挂载点
  */
-function render(vnode, container) {
-    const prevVnode = container.vnode
-    if (prevVnode === null) {
+export function render(vnode, container) {
+    const prevVNode = container.vnode || null
+    console.log('render', prevVNode)
+    if (prevVNode === null) {
         if (vnode) {
             // 没有旧 VNode 只有新 VNode 使用 mount 函数挂载全新的 VNode
             mount(vnode, container)
             // 将新的 VNode 添加到 container.vnode 属性下，这样洗一次渲染时旧的VNode 就存在了
             container.vnode = vnode
         }
+    } else {
+        if (vnode) {
+            // 有旧的 VNode,也有新的 VNode,则调用 patch 函数打补丁
+            patch(prevVNode, vnode, container)
+            // 更新 container.vnode
+            container.vnode = vnode
+        } else {
+            // 有旧的 VNode 但是没有新的 VNode ,说明应该移除 DOM,在浏览器中可以使用removeChild函数
+            container.removeChild(prevVNode.el)
+            container.vnode = null
+        }
     }
 }
+
+
+
+function patch(prevVNode, vnode, container) {}
+
+function Vue(options) {
+    console.log(1)
+}
+export default Vue
