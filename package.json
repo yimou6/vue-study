@@ -1,0 +1,32 @@
+{
+  "name": "vue-study",
+  "version": "1.0.0",
+  "description": "vue study",
+  "main": "test/index.html",
+  "scripts": {
+    "build": "webpack",
+    "dev": "webpack serve --env NODE_ENV=dev"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yimou6/vue-study.git"
+  },
+  "author": "yimou6",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/yimou6/vue-study/issues"
+  },
+  "homepage": "https://github.com/yimou6/vue-study#readme",
+  "devDependencies": {
+    "@babel/core": "^7.13.10",
+    "@babel/preset-env": "^7.13.12",
+    "babel-loader": "^8.2.2",
+    "html-webpack-plugin": "^5.3.1",
+    "webpack": "^5.28.0",
+    "webpack-cli": "^4.5.0",
+    "webpack-dev-server": "^3.11.2"
+  },
+  "dependencies": {
+    "@babel/polyfill": "^7.12.1"
+  }
+}
