@@ -1,5 +1,6 @@
 import VNodeFlags from './vnodeflags'
 import ChildrenFlags from './childrenflags'
+import {patch} from "./patch";
 
 
 export function mount(vnode, container) {
@@ -95,13 +96,36 @@ function mountComponent(vnode, container, isSVG) {
  */
 function mountStateFulComponent(vnode, container, isSVG) {
     // 创建组件实例
-    const instance = new vnode.tag()
-    // 渲染VNode
-    instance.$vnode = instance.render()
-    // 挂载
-    mount(instance.$vnode, container, isSVG)
-    // el属性值和组件实例的$el属性都引用组件的跟DOM元素
-    instance.$el = vnode.el = instance.$vnode.el
+    const instance = (vnode.children = new vnode.tag())
+    // 初始化 props
+    instance.$props = vnode.data
+
+
+    instance._update = function () {
+        // 如果 instance._mounted 为真，说明组件已经挂载，应该执行更新操作
+        if (instance._mounted) {
+            // 1 拿到旧的 VNode
+            const prevVNode = instance.$vnode
+            // 2 重新渲染的 VNode
+            const nextVNode = (instance.$vnode = instance.render())
+            // 3 patch 更新
+            //   通过获取旧的vnode.el的父节点获取容器
+            patch(prevVNode, nextVNode, prevVNode.el.parentNode)
+            // 4 更新 vnode.el 和 $el
+            instance.$el = vnode.el = instance.$vnode.el
+        } else {
+            // 1 渲染VNode
+            instance.$vnode = instance.render()
+            // 2 挂载
+            mount(instance.$vnode, container, isSVG)
+            // 3 组件已挂载的标识
+            instance._mounted = true
+            // 4 el属性值和组件实例的$el属性都引用组件的跟DOM元素
+            instance.$el = vnode.el = instance.$vnode.el
+        }
+    }
+
+    instance._update()
 }
 
 /**

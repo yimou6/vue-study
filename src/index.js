@@ -4,6 +4,7 @@
 import VNodeFlags from './vnodeflags.js'
 import ChildrenFlags from './childrenflags.js'
 import { mount, createTextVNode } from './mount.js'
+import { patch } from './patch'
 
 // 唯一标识 Fragment 无外层div
 const Fragment = Symbol()
@@ -161,9 +162,4 @@ export function render(vnode, container) {
 
 
 
-function patch(prevVNode, vnode, container) {}
 
-function Vue(options) {
-    console.log(1)
-}
-export default Vue
