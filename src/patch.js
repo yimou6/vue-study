@@ -38,6 +38,14 @@ export function patch(prevVNode, nextVNode, container) {
 function replaceVNode(prevVNode, nextVNode, container) {
     // 将旧的 VNode 所渲染的 DOM 从容器中移除
     container.removeChild(prevVNode.el)
+
+    // 如果将要被移除的VNode类型是组件，则需要调用该组件实例的 unmounted 钩子函数
+    if (prevVNode.flags & VNodeFlags.COMPONENT_STATEFUL_NORMAL) {
+        // 类型为有状态组件的 VNode,其children属性被用来存储组件实例对象
+        const instance = prevVNode.children
+        instance.unmounted && instance.unmounted()
+    }
+
     // 再把新的 VNode 挂载到容器中
     mount(nextVNode, container)
 }
@@ -99,14 +107,28 @@ function patchElement(prevVNode, nextVNode, container) {
  * @param container
  */
 function patchComponent(prevVNode, nextVNode, container) {
-    // 检查组件是否是有状态组件
-    if (nextVNode.flags & VNodeFlags.COMPONENT_STATEFUL_NORMAL) {
+    // tag属性的值是组件类，通过比较新旧组件类是否相等来判断是否是相同的组件
+    if (nextVNode.tag !== prevVNode.tag) {
+        replaceVNode(prevVNode, nextVNode, container)
+    } else if (nextVNode.flags & VNodeFlags.COMPONENT_STATEFUL_NORMAL) {
+        // 检查组件是否是有状态组件
         // 1 获取组件实例
         const instance = (nextVNode.children = prevVNode.children)
         // 2 更新 props
         instance.$props = nextVNode.data
         // 3 更新组件
         instance._update()
+    } else {
+        // 更新函数式组件
+        // 通过 prevVNode.handle 拿到 handle 对象
+        const handle = (nextVNode.handle = prevVNode.handle)
+        // 更新 handle 对象
+        handle.prev = prevVNode
+        handle.next = nextVNode
+        handle.container = container
+
+        // 调用 update 函数完成更新
+        handle.update()
     }
 }
 
@@ -313,11 +335,23 @@ function patchChildren(prevChildFlags, nextChildFlags, prevChildren, nextChildre
                     break
                 default:
                     // 新的 children 中有多个子节点
-                    for (let i = 0; i < prevChildren.length; i++) {
-                        container.removeChild(prevChildren[i].el)
+                    // 获取公共长度，取新旧 children 长度较小的那一个
+                    const prevLen = prevChildren.length
+                    const nextLen = nextChildren.length
+                    const commonLength = prevLen > nextLen ? nextLen : prevLen
+                    for (let i = 0; i < commonLength; i++) {
+                        patch(prevChildren[i], nextChildren[i], container)
                     }
-                    for (let i = 0; i < nextChildren.length; i++) {
-                        mount(nextChildren[i], container)
+                    // 如果 nextLen > prevLen 将多出来的元素添加
+                    if (nextLen > prevLen) {
+                        for (let i = commonLength; i < nextLen; i++) {
+                            mount(nextChildren[i], container)
+                        }
+                    } else if (prevLen > nextLen) {
+                        // 如果 prevLen > nextLen 将多出来的元素移除
+                        for (let i = commonLength; i < prevLen; i++) {
+                            container.removeChild(prevChildren[i].el)
+                        }
                     }
                     break
             }

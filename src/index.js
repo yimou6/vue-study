@@ -83,6 +83,7 @@ export function h(tag, data = null, children = null) {
         _isVNode: true,
         flags,
         data,
+        key: data && data.key ? data.key : null,
         tag,
         children,
         childFlags,

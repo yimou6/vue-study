@@ -4,7 +4,6 @@ import {patch} from "./patch";
 
 
 export function mount(vnode, container) {
-    console.log('mount')
     const { flags } = vnode
     if (flags & VNodeFlags.ELEMENT) {
         // 挂载普通标签
@@ -37,7 +36,8 @@ function mountElement(vnode, container, isSVG) {
         for (const key in data) {
             switch (key) {
                 case 'style':
-                    // 如果 key 的值是 style，说明是内联样式,逐个将样式规则应用到 el
+                    //
+                    // 如果 key 的值是 style，说明是内联样式，逐个将样式规则应用到 el
                     for (const k in data.style) {
                         el.style[k] = data.style[k]
                     }
@@ -135,12 +135,40 @@ function mountStateFulComponent(vnode, container, isSVG) {
  * @param isSVG
  */
 function mountFunctionalComponent(vnode, container, isSVG) {
-    // 获取 VNode
-    const $vnode = vnode.tag()
-    // 挂载
-    mount($vnode, container, isSVG)
-    // el 元素引用该组件的根元素
-    vnode.el = $vnode.el
+    // 在函数式组件类型的 vnode 上添加 handle 属性,他是一个对象
+    vnode.handle = {
+        prev: null,
+        next: vnode,
+        container,
+        update: () => {
+            if (vnode.handle.prev) {
+                // 更新
+                // prevVNode 是旧的组件 VNode,nextVNode是新的组件VNode
+                const prevVNode = vnode.handle.prev
+                const nextVNode = vnode.handle.next
+                // prevTree 是组件产出的旧的 VNode
+                const prevTree = prevVNode.children
+                // 更新 props 数据
+                const props = nextVNode.data
+                // nextTree 是组件产出的新的 VNode
+                const nextTree = (nextVNode.children = nextVNode.tag(props))
+                // 调用 patch 函数更新
+                patch(prevTree, nextTree, vnode.handle.container)
+            } else {
+                // 初始化 props
+                const props = vnode.data
+                // 获取 VNode
+                const $vnode = (vnode.children = vnode.tag(props))
+                // 挂载
+                mount($vnode, container, isSVG)
+                // el元素引用该组件的根元素
+                vnode.el = $vnode.el
+            }
+        }
+    }
+
+    // 立即调用 vnode.handle.update 完成初次挂载
+    vnode.handle.update()
 }
 function mountText(vnode, container) {
     const el = document.createTextNode(vnode.children)
