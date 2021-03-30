@@ -334,23 +334,43 @@ function patchChildren(prevChildFlags, nextChildFlags, prevChildren, nextChildre
                     }
                     break
                 default:
-                    // 新的 children 中有多个子节点
-                    // 获取公共长度，取新旧 children 长度较小的那一个
-                    const prevLen = prevChildren.length
-                    const nextLen = nextChildren.length
-                    const commonLength = prevLen > nextLen ? nextLen : prevLen
-                    for (let i = 0; i < commonLength; i++) {
-                        patch(prevChildren[i], nextChildren[i], container)
-                    }
-                    // 如果 nextLen > prevLen 将多出来的元素添加
-                    if (nextLen > prevLen) {
-                        for (let i = commonLength; i < nextLen; i++) {
-                            mount(nextChildren[i], container)
+                    let lastIndex = 0
+                    for (let i = 0; i < nextChildren.length; i++) {
+                        const nextVNode = nextChildren[i]
+                        let j = 0
+                        let find = false
+                        for (j; i < prevChildren.length; j++) {
+                            const prevVNode = prevChildren[j]
+                            if (nextVNode.key === prevVNode.key) {
+                                find = true
+                                patch(prevVNode, nextVNode, container)
+                                if (j < lastIndex) {
+                                    // 需要移动
+                                    const refNode = nextChildren[i - 1].el.nextSibling
+                                    container.insertBefore(prevVNode.el, refNode)
+                                    break
+                                } else {
+                                    // 更新lastIndex
+                                    lastIndex = j
+                                }
+                            }
                         }
-                    } else if (prevLen > nextLen) {
-                        // 如果 prevLen > nextLen 将多出来的元素移除
-                        for (let i = commonLength; i < prevLen; i++) {
-                            container.removeChild(prevChildren[i].el)
+                        if (!find) {
+                            // 挂载新节点
+                            const refNode = i - 1 < 0 ? prevChildren[0].el : nextChildren[i - 1].el.nextSibling
+                            mount(nextVNode, container, false, refNode)
+                        }
+                    }
+
+                    // 移除已经不存在的节点
+                    // 遍历旧的节点
+                    for (let i = 0; i < prevChildren.length; i++) {
+                        const prevVNode = prevChildren[i]
+                        // 拿着旧VNode去新children中寻找相同的节点
+                        const has = nextChildren.find(nextVNode => nextVNode.key === prevVNode.key)
+                        if (!has) {
+                            // 如果没有找到相同的节点，则移除
+                            container.removeChild(prevVNode.el)
                         }
                     }
                     break
